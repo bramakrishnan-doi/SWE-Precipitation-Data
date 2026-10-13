@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Colorado Basin Snowpack & Precip Monitor</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273549; --accent:#38bdf8;
+    --accent2:#22d3ee; --text:#e2e8f0; --muted:#94a3b8; --good:#34d399; --bad:#f87171;
+    --border:#334155;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; font-family:'Segoe UI',system-ui,sans-serif;
+    background:radial-gradient(circle at top left,#1e3a5f,transparent 60%),
+               radial-gradient(circle at bottom right,#1e1b4b,transparent 60%),
+               var(--bg);
+    color:var(--text); display:flex; justify-content:center; padding:40px 20px;
+  }
+  .card{
+    width:100%; max-width:1000px; background:var(--panel);
+    border:1px solid var(--border); border-radius:16px; padding:32px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.4);
+  }
+  h1{margin:0 0 4px 0; font-size:24px; font-weight:700; letter-spacing:-0.5px;}
+  .subtitle{color:var(--muted); font-size:14px; margin-bottom:24px;}
+
+  .site-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px;
+    margin-bottom:20px;
+  }
+  .site-card{
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+    padding:14px; display:flex; flex-direction:column; gap:8px;
+  }
+  .site-card.loaded{border-color:rgba(52,211,153,0.4);}
+  .site-card.error{border-color:rgba(248,113,113,0.4);}
+  .site-head{display:flex; justify-content:space-between; align-items:center;}
+  .site-name{font-weight:700; color:var(--accent2); font-size:14px;}
+  .site-dot{width:8px; height:8px; border-radius:50%; background:var(--muted); flex-shrink:0;}
+  .site-dot.ok{background:var(--good);}
+  .site-dot.err{background:var(--bad);}
+  .site-title{font-size:11px; color:var(--muted); line-height:1.3;}
+  .site-cache-note{font-size:10px; color:#fbbf24;}
+  .site-actions{display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;}
+
+  button{
+    cursor:pointer; border:none; border-radius:8px; padding:8px 14px;
+    font-size:13px; font-weight:600; font-family:inherit; transition:transform .12s, box-shadow .12s;
+  }
+  button:active{transform:scale(0.97);}
+  .btn-primary{
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#06202f;
+    box-shadow:0 4px 14px rgba(56,189,248,0.3);
+  }
+  .btn-primary:hover{box-shadow:0 6px 18px rgba(56,189,248,0.45);}
+  .btn-secondary{
+    background:#0f1a2e; color:var(--text); border:1px solid var(--border);
+  }
+  .btn-secondary:hover{border-color:var(--accent);}
+  button:disabled{opacity:0.4; cursor:not-allowed; box-shadow:none;}
+  .btn-sm{padding:6px 10px; font-size:12px;}
+  .file-label{
+    display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+    background:#0f1a2e; border:1px dashed var(--border); padding:6px 10px;
+    border-radius:8px; font-size:12px; color:var(--muted);
+  }
+  .file-label:hover{border-color:var(--accent); color:var(--text);}
+  .file-label input{display:none;}
+
+  .controls{
+    display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin-bottom:20px;
+    background:var(--panel2); padding:18px; border-radius:12px; border:1px solid var(--border);
+  }
+  .field{display:flex; flex-direction:column; gap:6px;}
+  .field label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;}
+  input[type="date"], input[type="text"]{
+    background:#0f1a2e; border:1px solid var(--border); color:var(--text);
+    padding:9px 12px; border-radius:8px; font-size:14px; font-family:inherit;
+  }
+  input[type="date"]:focus, input[type="text"]:focus{outline:2px solid var(--accent); outline-offset:1px;}
+
+  .status{
+    font-size:13px; padding:10px 14px; border-radius:8px; margin-bottom:20px;
+    display:none; align-items:center; gap:8px;
+  }
+  .status.show{display:flex;}
+  .status.info{background:rgba(56,189,248,0.1); color:var(--accent); border:1px solid rgba(56,189,248,0.3);}
+  .status.error{background:rgba(248,113,113,0.1); color:var(--bad); border:1px solid rgba(248,113,113,0.3);}
+  .status.success{background:rgba(52,211,153,0.1); color:var(--good); border:1px solid rgba(52,211,153,0.3);}
+  .spinner{
+    width:14px; height:14px; border:2px solid rgba(56,189,248,0.3); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  table{width:100%; border-collapse:collapse; margin-top:4px;}
+  thead th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+    color:var(--muted); padding:10px 14px; border-bottom:1px solid var(--border);
+  }
+  tbody td{padding:14px; font-size:14px; border-bottom:1px solid var(--border);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:rgba(255,255,255,0.02);}
+  .label-cell{font-weight:700; color:var(--accent2);}
+  .percent-badge{display:inline-block; padding:3px 10px; border-radius:999px; font-weight:700; font-size:13px;}
+  .percent-good{background:rgba(52,211,153,0.15); color:var(--good);}
+  .percent-low{background:rgba(248,113,113,0.15); color:var(--bad);}
+  .percent-mid{background:rgba(251,191,36,0.15); color:#fbbf24;}
+  .empty-state{text-align:center; padding:40px 20px; color:var(--muted); font-size:14px;}
+  .footer-note{font-size:12px; color:var(--muted); margin-top:18px; line-height:1.6;}
+  .footer-note code{background:var(--panel2); padding:1px 6px; border-radius:4px; font-size:11px;}
+  .section-label{font-size:13px; font-weight:700; color:var(--text); margin-bottom:10px;}
+  .top-actions{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+
+  .chart-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:16px;}
+  .chart-panel{
+    background:#fff; border-radius:12px; padding:14px; border:1px solid var(--border);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .chart-panel-head{display:flex; justify-content:space-between; align-items:center;}
+  .chart-panel-title{font-size:12px; font-weight:700; color:#111;}
+  .chart-dl-btn{
+    background:#1e293b; color:#e2e8f0; border:none; border-radius:6px;
+    padding:4px 10px; font-size:11px; cursor:pointer;
+  }
+  .chart-dl-btn:hover{background:#334155;}
+  .chart-svg-wrap{width:100%; overflow-x:auto;}
+
+  select{
+    background:#0f1a2e; border:1px solid var(--border); color:var(--text);
+    padding:9px 12px; border-radius:8px; font-size:14px; font-family:inherit;
+  }
+  select:focus{outline:2px solid var(--accent); outline-offset:1px;}
+
+  .site-table-wrap{max-height:500px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;}
+  .site-table-wrap table{margin-top:0;}
+  .site-table-wrap thead th{position:sticky; top:0; background:var(--panel2); z-index:1;}
+
+  .year-checkbox-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(70px,1fr)); gap:6px;
+    max-height:120px; overflow-y:auto; background:#0f1a2e; border:1px solid var(--border);
+    border-radius:8px; padding:10px; margin-top:4px;
+  }
+  .year-checkbox-label{
+    display:flex; align-items:center; gap:5px; font-size:12px; color:var(--text); cursor:pointer;
+  }
+  .year-checkbox-label input{cursor:pointer;}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Colorado Basin Snowpack &amp; Precip Monitor</h1>
+  <div class="subtitle">Snow Water Equivalent &amp; Precipitation vs. 30-Year Median &mdash; All Basins</div>
+
+  <div class="top-actions">
+    <button class="btn-primary" id="fetchAllBtn">Get All Data (Online)</button>
+    <button class="btn-secondary" id="downloadAllBtn" disabled>⬇ Download All CSVs</button>
+    <button class="btn-secondary" id="downloadExcelBtn" disabled>⬇ Download Excel Summary</button>
+    <button class="btn-secondary" id="clearCacheBtn">🗑 Clear Cache</button>
+    <button class="btn-secondary" id="exportCacheBtn">⬆ Export Cache</button>
+    <label class="file-label">
+      ⬇ Import Cache
+      <input type="file" id="importCacheInput" accept=".json">
+    </label>
+  </div>
+
+  <div class="section-label">Sites</div>
+  <div class="site-grid" id="siteGrid"></div>
+
+  <div class="controls">
+    <div class="field">
+      <label>Query Date</label>
+      <input type="date" id="dateInput">
+    </div>
+    <div class="field">
+      <button class="btn-secondary" id="queryBtn" disabled>Look Up Date (All Loaded Sites)</button>
+    </div>
+    <div class="field">
+      <button class="btn-secondary" id="latestBtn" disabled>Show Latest (All Loaded Sites)</button>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div id="resultArea">
+    <div class="empty-state">
+      No data loaded yet.<br>Click <strong>Get All Data (Online)</strong> or load sites individually below.
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top:28px;">Charts</div>
+  <div class="chart-grid" id="chartGrid"></div>
+
+  <div class="section-label" style="margin-top:28px;">Site Data Table</div>
+  <div class="controls">
+    <div class="field">
+      <label>Site</label>
+      <select id="tableSiteSelect"></select>
+    </div>
+    <div class="field">
+      <button class="btn-secondary" id="toggleYearPlotBtn">📈 Plot Custom Years</button>
+    </div>
+    <div class="field">
+      <button class="btn-secondary" id="quickAnalogBtn">🔮 Show Analog Projection</button>
+    </div>
+  </div>
+
+  <div id="yearPlotPanel" style="display:none;">
+    <div class="controls" style="align-items:flex-end;" id="yearPickerControls">
+      <div class="field" style="flex:1; min-width:280px;">
+        <label>Select Water Years</label>
+        <div id="yearCheckboxes" class="year-checkbox-grid"></div>
+      </div>
+    </div>
+    <div class="controls" style="align-items:center;" id="analogToggleControls">
+      <div class="field" style="flex-direction:row; align-items:center; gap:8px;">
+        <input type="checkbox" id="analogModeCheckbox" style="width:16px; height:16px;">
+        <label style="text-transform:none; font-size:13px; color:var(--text);" for="analogModeCheckbox">
+          Show Analog Projections (1991–2020) — projects rest of water year using historical increments from today's date
+        </label>
+      </div>
+    </div>
+    <div class="controls" style="align-items:flex-end;">
+      <div class="field" style="flex:1; min-width:220px;">
+        <label>Chart Title (optional)</label>
+        <input type="text" id="yearPlotTitleInput" placeholder="Default: site's full name">
+      </div>
+      <div class="field" style="flex:1; min-width:220px;">
+        <label>Subtitle (optional)</label>
+        <input type="text" id="yearPlotSubtitleInput" placeholder="Default: Water Year Comparison">
+      </div>
+      <div class="field">
+        <button class="btn-primary" id="renderYearPlotBtn">Plot Selected Years</button>
+      </div>
+      <div class="field">
+        <button class="btn-secondary" id="yearPlotPngBtn" disabled>⬇ PNG</button>
+      </div>
+    </div>
+    <div class="chart-panel" style="background:#fff;">
+      <div class="chart-svg-wrap">
+        <svg id="year-plot-svg"></svg>
+      </div>
+    </div>
+  </div>
+
+  <div id="siteTableArea"></div>
+
+  <div class="footer-note">
+    Source: <code>nwcc-apps.sc.egov.usda.gov</code> basin CSVs. If online fetch fails (CORS), download each CSV
+    manually and use that site's <strong>Upload</strong> button. "Current" = latest non-blank value in the active
+    Water Year column. "Percent" = Current ÷ Median ('91-'20) × 100. Data is cached locally in your browser
+    (localStorage) so charts still show the last available data even if a fetch fails.
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+const SITES = [
+  { key:'uc_swe',    label:'UC SWE',    title:'Colorado River Basin Snowpack Above Lake Powell',
+    url:'https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/WTEQ/assocHUC2/14_Upper_Colorado_Region.csv',
+    filename:'14_Upper_Colorado_Region_WTEQ.csv' },
+  { key:'mead_swe',  label:'Mead SWE',  title:'Lower Colorado Lake Mead Basin Snowpack',
+    url:'https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/WTEQ/assocHUC6/150100_Lower_Colorado-Lake_Mead.csv',
+    filename:'150100_Lower_Colorado-Lake_Mead_WTEQ.csv' },
+  { key:'salt_swe',  label:'Salt SWE',  title:'Salt-Verde River Basin Snowpack',
+    url:'https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/WTEQ/assocHUC4/1506_Salt.csv',
+    filename:'1506_Salt_WTEQ.csv' },
+  { key:'uc_prec',   label:'UC Precip', title:'Upper Colorado Basin Above Lake Powell Precipitation',
+    url:'https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/PREC/assocHUC2/14_Upper_Colorado_Region.csv',
+    filename:'14_Upper_Colorado_Region_PREC.csv' },
+  { key:'mead_prec', label:'Mead Precip', title:'Lower Colorado Lake Mead Basin Precipitation',
+    url:'https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/PREC/assocHUC6/150100_Lower_Colorado-Lake_Mead.csv',
+    filename:'150100_Lower_Colorado-Lake_Mead_PREC.csv' },
+  { key:'salt_prec', label:'Salt Precip', title:'Salt-Verde Basin Precipitation',
+    url:'https://nwcc-apps.sc.egov.usda.gov/awdb/basin-plots/POR/PREC/assocHUC4/1506_Salt.csv',
+    filename:'1506_Salt_PREC.csv' },
+];
+
+// Chart configs mirror the R script's create_swe_plot() calls
+const CHART_CONFIGS = [
+  { key:'salt_swe',  plotTitle:'Salt-Verde River Basin Snowpack',
+    yInterval:2, yLabel:'Snow Water Equivalent (in)', showFutureRect:true, filename:'Salt-VerdeSWE.png' },
+  { key:'uc_swe',    plotTitle:'Colorado River Basin Snowpack Above Lake Powell',
+    yInterval:5, yLabel:'Snow Water Equivalent (in)', showFutureRect:true, filename:'AbvPowellSWE.png' },
+  { key:'mead_swe',  plotTitle:'Lower Colorado Lake Mead Basin Snowpack',
+    yInterval:5, yLabel:'Snow Water Equivalent (in)', showFutureRect:true, filename:'LakeMeadSWE.png' },
+  { key:'salt_prec', plotTitle:'Salt-Verde Basin',
+    yInterval:5, yLabel:'Precipitation Accumulation (in.)', showFutureRect:false, filename:'Salt-VerdePrecip.png' },
+  { key:'uc_prec',   plotTitle:'Upper Colorado Basin Above Lake Powell',
+    yInterval:5, yLabel:'Precipitation Accumulation (in.)', showFutureRect:false, filename:'UpperColoradoPrecip.png' },
+  { key:'mead_prec', plotTitle:'Lower Colorado Lake Mead Basin',
+    yInterval:5, yLabel:'Precipitation Accumulation (in.)', showFutureRect:false, filename:'LakeMeadPrecip.png' },
+];
+
+const YEAR_COLORS = [
+  '#9A3324','#25819C','#D97706','#7C3AED','#059669','#DB2777',
+  '#2563EB','#CA8A04','#DC2626','#0D9488','#9333EA','#65A30D'
+];
+
+const CACHE_PREFIX = 'swe_monitor_cache_';
+
+// store per-site: {rows, fields, rawText, status, errorMsg, cachedAt, isFromCache}
+const siteData = {};
+SITES.forEach(s => siteData[s.key] = { rows:null, fields:null, rawText:null, status:'idle', errorMsg:null, cachedAt:null, isFromCache:false });
+
+const statusEl = document.getElementById('status');
+const resultArea = document.getElementById('resultArea');
+const dateInput = document.getElementById('dateInput');
+const queryBtn = document.getElementById('queryBtn');
+const latestBtn = document.getElementById('latestBtn');
+const fetchAllBtn = document.getElementById('fetchAllBtn');
+const downloadAllBtn = document.getElementById('downloadAllBtn');
+const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+const clearCacheBtn = document.getElementById('clearCacheBtn');
+const exportCacheBtn = document.getElementById('exportCacheBtn');
+const importCacheInput = document.getElementById('importCacheInput');
+const siteGrid = document.getElementById('siteGrid');
+
+function setStatus(msg, type){
+  statusEl.className = 'status show ' + type;
+  statusEl.innerHTML = type==='info' ? `<div class="spinner"></div><span>${msg}</span>` : `<span>${msg}</span>`;
+}
+function clearStatus(){ statusEl.className = 'status'; statusEl.innerHTML=''; }
+
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  const headers = lines[0].split(',').map(h => h.trim());
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    const parts = lines[i].split(',');
+    const row = {};
+    headers.forEach((h,idx) => row[h] = parts[idx] !== undefined ? parts[idx].trim() : '');
+    rows.push(row);
+  }
+  return {rows, headers};
+}
+
+function parseFloatOrNull(v){
+  if(v === undefined || v === '' || v === null) return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function currentWaterYear(d){
+  d = d || new Date();
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  return m >= 10 ? y + 1 : y;
+}
+function toMMDD(d){
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${mm}-${dd}`;
+}
+function wyDateFromMMDD(mmdd, wy){
+  const [mm, dd] = mmdd.split('-').map(Number);
+  const calYear = mm >= 10 ? wy - 1 : wy;
+  return `${mm}/${dd}/${calYear}`;
+}
+function dummyDate(mmdd){
+  const [mm, dd] = mmdd.split('-').map(Number);
+  const yr = mm >= 10 ? 1979 : 1980;
+  return new Date(yr, mm-1, dd);
+}
+function fmtTitleDate(d, realYear){
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${months[d.getMonth()]} ${String(d.getDate()).padStart(2,'0')}, ${realYear}`;
+}
+
+function computeLatest(rows, fields, wy){
+  const yearCol = String(wy);
+  const medianCol = "Median ('91-'20)";
+  if(!fields.includes(yearCol)) throw new Error(`Column ${yearCol} not found`);
+  if(!fields.includes(medianCol)) throw new Error(`Column "${medianCol}" not found`);
+  let lastValid = null;
+  for(const row of rows){
+    const v = row[yearCol];
+    if(v !== undefined && v !== '' && v.toUpperCase() !== 'NA' && !isNaN(parseFloat(v))) lastValid = row;
+  }
+  if(!lastValid) throw new Error(`No valid data for water year ${yearCol}`);
+  const current = parseFloat(lastValid[yearCol]);
+  const median = parseFloat(lastValid[medianCol]);
+  const percent = median !== 0 ? (current/median*100) : NaN;
+  return { date:lastValid.date, current, median, percent, wyDate:wyDateFromMMDD(lastValid.date, wy), wy };
+}
+
+function computeForDate(rows, fields, dateObj){
+  const wy = currentWaterYear(dateObj);
+  const yearCol = String(wy);
+  const medianCol = "Median ('91-'20)";
+  const mmdd = toMMDD(dateObj);
+  if(!fields.includes(yearCol)) throw new Error(`Column ${yearCol} not found`);
+  if(!fields.includes(medianCol)) throw new Error(`Column "${medianCol}" not found`);
+  const row = rows.find(r => r.date === mmdd);
+  if(!row) throw new Error(`Date ${mmdd} not found`);
+  const v = row[yearCol];
+  if(v === undefined || v === '' || v.toUpperCase() === 'NA' || isNaN(parseFloat(v))){
+    throw new Error(`No data for ${mmdd} in WY ${yearCol}`);
+  }
+  const current = parseFloat(v);
+  const median = parseFloat(row[medianCol]);
+  const percent = median !== 0 ? (current/median*100) : NaN;
+  return { date:mmdd, current, median, percent, wyDate:wyDateFromMMDD(mmdd, wy), wy };
+}
+
+function percentClass(p){
+  if(isNaN(p)) return 'percent-mid';
+  if(p >= 90) return 'percent-good';
+  if(p >= 70) return 'percent-mid';
+  return 'percent-low';
+}
+function fmtNum(n){
+  if(isNaN(n)) return 'N/A';
+  return n.toFixed(4).replace(/0+$/,'').replace(/\.$/,'') || '0';
+}
+
+// --- Cache helpers ---
+function cacheKey(key){ return CACHE_PREFIX + key; }
+
+function saveToCache(key, text){
+  try{
+    const payload = JSON.stringify({ text, savedAt: new Date().toISOString() });
+    localStorage.setItem(cacheKey(key), payload);
+  }catch(e){
+    console.warn('Cache save failed (storage full or unavailable):', e.message);
+  }
+}
+
+function loadFromCache(key){
+  try{
+    const raw = localStorage.getItem(cacheKey(key));
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){
+    return null;
+  }
+}
+
+function clearAllCache(){
+  SITES.forEach(s => localStorage.removeItem(cacheKey(s.key)));
+  setStatus('Cache cleared.', 'success');
+}
+
+function cacheAgeLabel(savedAtISO){
+  const saved = new Date(savedAtISO);
+  const diffMs = Date.now() - saved.getTime();
+  const days = Math.floor(diffMs / 86400000);
+  const hours = Math.floor(diffMs / 3600000);
+  if(days >= 1) return `${days} day${days>1?'s':''} ago`;
+  if(hours >= 1) return `${hours} hour${hours>1?'s':''} ago`;
+  return 'moments ago';
+}
+
+// --- Site grid rendering ---
+function renderSiteGrid(){
+  siteGrid.innerHTML = SITES.map(s => {
+    const d = siteData[s.key];
+    const cls = d.status==='ok' ? 'loaded' : (d.status==='error' ? 'error' : '');
+    const dotCls = d.status==='ok' ? 'ok' : (d.status==='error' ? 'err' : '');
+    const cacheNote = (d.status==='ok' && d.isFromCache)
+      ? `<div class="site-cache-note">⚠ cached ${cacheAgeLabel(d.cachedAt)}</div>` : '';
+    return `
+      <div class="site-card ${cls}" data-key="${s.key}">
+        <div class="site-head">
+          <span class="site-name">${s.label}</span>
+          <span class="site-dot ${dotCls}"></span>
+        </div>
+        <div class="site-title">${s.title}</div>
+        ${cacheNote}
+        <div class="site-actions">
+          <button class="btn-secondary btn-sm" data-action="fetch" data-key="${s.key}">Fetch</button>
+          <label class="file-label">
+            Upload
+            <input type="file" accept=".csv" data-action="upload" data-key="${s.key}">
+          </label>
+          <button class="btn-secondary btn-sm" data-action="download" data-key="${s.key}" ${d.status==='ok'?'':'disabled'}>⬇</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  siteGrid.querySelectorAll('[data-action="fetch"]').forEach(btn => {
+    btn.addEventListener('click', () => fetchSite(btn.dataset.key));
+  });
+  siteGrid.querySelectorAll('[data-action="upload"]').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if(file) uploadSite(inp.dataset.key, file);
+    });
+  });
+  siteGrid.querySelectorAll('[data-action="download"]').forEach(btn => {
+    btn.addEventListener('click', () => downloadSite(btn.dataset.key));
+  });
+}
+
+function loadTextIntoSite(key, text, fromCache){
+  const {rows, headers} = parseCSV(text);
+  if(!headers.includes('date')) throw new Error('CSV missing "date" column');
+  siteData[key] = {
+    rows, fields:headers, rawText:text, status:'ok', errorMsg:null,
+    cachedAt: fromCache ? (loadFromCache(key)?.savedAt || null) : new Date().toISOString(),
+    isFromCache: !!fromCache
+  };
+  if(!fromCache) saveToCache(key, text);
+}
+
+async function fetchSite(key){
+  const site = SITES.find(s=>s.key===key);
+  siteData[key].status = 'loading';
+  renderSiteGrid();
+  setStatus(`Fetching ${site.label}...`, 'info');
+  try{
+    const resp = await fetch(site.url);
+    if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    loadTextIntoSite(key, text, false);
+    setStatus(`${site.label} loaded (fresh).`, 'success');
+  }catch(e){
+    const cached = loadFromCache(key);
+    if(cached){
+      try{
+        loadTextIntoSite(key, cached.text, true);
+        setStatus(`${site.label} fetch failed (CORS). Using cached data from ${cacheAgeLabel(cached.savedAt)}.`, 'error');
+      }catch(parseErr){
+        siteData[key] = { rows:null, fields:null, rawText:null, status:'error', errorMsg:parseErr.message, cachedAt:null, isFromCache:false };
+        setStatus(`${site.label} fetch failed and cache unreadable: ${parseErr.message}`, 'error');
+      }
+    }else{
+      siteData[key] = { rows:null, fields:null, rawText:null, status:'error', errorMsg:e.message, cachedAt:null, isFromCache:false };
+      setStatus(`${site.label} fetch failed (likely CORS): ${e.message}. No cache available - use Upload.`, 'error');
+    }
+  }
+  try{
+    renderSiteGrid();
+    updateGlobalButtons();
+    refreshTableIfPossible();
+  }catch(renderErr){
+    console.error('Render error after fetch:', renderErr);
+  }
+}
+
+async function uploadSite(key, file){
+  const site = SITES.find(s=>s.key===key);
+  setStatus(`Reading ${file.name} for ${site.label}...`, 'info');
+  try{
+    const text = await file.text();
+    loadTextIntoSite(key, text, false);
+    setStatus(`${site.label} loaded from file.`, 'success');
+  }catch(e){
+    siteData[key] = { rows:null, fields:null, rawText:null, status:'error', errorMsg:e.message, cachedAt:null, isFromCache:false };
+    setStatus(`${site.label} load failed: ${e.message}`, 'error');
+  }
+  renderSiteGrid();
+  updateGlobalButtons();
+  refreshTableIfPossible();
+}
+
+function downloadSite(key){
+  const d = siteData[key];
+  const site = SITES.find(s=>s.key===key);
+  if(!d || !d.rawText) return;
+  const blob = new Blob([d.rawText], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = site.filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function fetchAll(){
+  fetchAllBtn.disabled = true;
+  for(const s of SITES){
+    try{
+      await fetchSite(s.key);
+    }catch(e){
+      console.error('fetchSite threw unexpectedly for', s.key, e);
+    }
+  }
+  fetchAllBtn.disabled = false;
+}
+
+function downloadAll(){
+  SITES.forEach(s => { if(siteData[s.key].status==='ok') downloadSite(s.key); });
+}
+
+function updateGlobalButtons(){
+  const anyLoaded = SITES.some(s => siteData[s.key].status === 'ok');
+  queryBtn.disabled = !anyLoaded;
+  latestBtn.disabled = !anyLoaded;
+  downloadAllBtn.disabled = !anyLoaded;
+  downloadExcelBtn.disabled = !anyLoaded;
+}
+
+function renderTable(rowsOut){
+  if(rowsOut.length === 0){
+    resultArea.innerHTML = `<div class="empty-state">No sites loaded yet.</div>`;
+    return;
+  }
+  resultArea.innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Label</th><th>Date</th><th>Current</th><th>Median ('91-'20)</th><th>WY Date</th><th>Percent</th></tr>
+      </thead>
+      <tbody>
+        ${rowsOut.map(r => `
+          <tr>
+            <td class="label-cell">${r.label}</td>
+            <td>${r.error ? '—' : r.date}</td>
+            <td>${r.error ? '—' : fmtNum(r.current)}</td>
+            <td>${r.error ? '—' : fmtNum(r.median)}</td>
+            <td>${r.error ? '—' : r.wyDate}</td>
+            <td>${r.error ? `<span style="color:var(--bad); font-size:12px;">${r.error}</span>` : `<span class="percent-badge ${percentClass(r.percent)}">${isNaN(r.percent) ? 'N/A' : r.percent.toFixed(2)+'%'}</span>`}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function computeAllLatest(){
+  const out = [];
+  SITES.forEach(s => {
+    const d = siteData[s.key];
+    if(d.status !== 'ok') return;
+    try{
+      const wy = currentWaterYear();
+      const r = computeLatest(d.rows, d.fields, wy);
+      out.push({ label:s.label, ...r });
+    }catch(e){
+      out.push({ label:s.label, error:e.message });
+    }
+  });
+  return out;
+}
+
+function computeAllForDate(dateObj){
+  const out = [];
+  SITES.forEach(s => {
+    const d = siteData[s.key];
+    if(d.status !== 'ok') return;
+    try{
+      const r = computeForDate(d.rows, d.fields, dateObj);
+      out.push({ label:s.label, ...r });
+    }catch(e){
+      out.push({ label:s.label, error:e.message });
+    }
+  });
+  return out;
+}
+
+function refreshTableIfPossible(){
+  const anyLoaded = SITES.some(s => siteData[s.key].status === 'ok');
+  if(!anyLoaded) return;
+  renderTable(computeAllLatest());
+  renderCharts();
+  renderSiteTable();
+}
+
+latestBtn.addEventListener('click', () => {
+  clearStatus();
+  renderTable(computeAllLatest());
+});
+
+queryBtn.addEventListener('click', () => {
+  if(!dateInput.value){ setStatus('Pick a date first.', 'error'); return; }
+  clearStatus();
+  const d = new Date(dateInput.value + 'T00:00:00');
+  renderTable(computeAllForDate(d));
+});
+
+fetchAllBtn.addEventListener('click', fetchAll);
+downloadAllBtn.addEventListener('click', downloadAll);
+downloadExcelBtn.addEventListener('click', downloadExcelSummary);
+clearCacheBtn.addEventListener('click', () => {
+  if(confirm('Clear all cached site data? This cannot be undone.')){
+    clearAllCache();
+  }
+});
+
+function exportCache(){
+  const payload = { exportedAt: new Date().toISOString(), sites: {} };
+  let anyFound = false;
+  SITES.forEach(s => {
+    const cached = loadFromCache(s.key);
+    if(cached){
+      payload.sites[s.key] = cached;
+      anyFound = true;
+    }
+  });
+  if(!anyFound){
+    setStatus('No cached data to export.', 'error');
+    return;
+  }
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `swe_monitor_cache_${dateStr}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus('Cache exported.', 'success');
+}
+
+async function importCache(file){
+  setStatus('Reading cache file...', 'info');
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if(!payload.sites) throw new Error('Invalid cache file format');
+
+    let count = 0;
+    Object.keys(payload.sites).forEach(key => {
+      const siteExists = SITES.some(s => s.key === key);
+      if(!siteExists) return;
+      const entry = payload.sites[key];
+      try{
+        localStorage.setItem(cacheKey(key), JSON.stringify(entry));
+        count++;
+      }catch(e){
+        console.warn('Failed to import cache for', key, e.message);
+      }
+    });
+
+    if(count === 0) throw new Error('No matching site data found in file');
+
+    setStatus(`Imported cache for ${count} site(s). Reloading from cache...`, 'success');
+    loadAllFromCacheOnStartup();
+  }catch(e){
+    setStatus(`Cache import failed: ${e.message}`, 'error');
+  }
+}
+
+exportCacheBtn.addEventListener('click', exportCache);
+importCacheInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(file) importCache(file);
+  e.target.value = '';
+});
+
+function loadAllFromCacheOnStartup(){
+  let anyFound = false;
+  SITES.forEach(s => {
+    const cached = loadFromCache(s.key);
+    if(cached){
+      try{
+        loadTextIntoSite(s.key, cached.text, true);
+        anyFound = true;
+      }catch(e){
+        console.warn('Failed to load cache for', s.key, e.message);
+      }
+    }
+  });
+  if(anyFound){
+    setStatus('Loaded cached data from previous session. Click "Get All Data" to refresh.', 'info');
+  }
+  renderSiteGrid();
+  updateGlobalButtons();
+  refreshTableIfPossible();
+}
+
+function fmtDateSlash(d){
+  return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+}
+function fmtDateFile(d){
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+const BASIN_GROUPS = [
+  { basin:'COLORADO RIVER BASIN ABOVE LAKE POWELL', swe:'uc_swe',   precip:'uc_prec' },
+  { basin:'VERDE & UPPER SALT RIVER BASIN',          swe:'salt_swe', precip:'salt_prec' },
+  { basin:'LAKE MEAD BASIN',                         swe:'mead_swe', precip:'mead_prec' },
+];
+
+function latestResultFor(key){
+  const d = siteData[key];
+  if(!d || d.status !== 'ok') return null;
+  try{
+    const wy = currentWaterYear();
+    return computeLatest(d.rows, d.fields, wy);
+  }catch(e){
+    return null;
+  }
+}
+
+function downloadExcelSummary(){
+  const queryDateObj = dateInput.value ? new Date(dateInput.value + 'T00:00:00') : new Date();
+
+  let lastUpdated = null;
+  BASIN_GROUPS.forEach(g => {
+    [g.swe, g.precip].forEach(key => {
+      const r = latestResultFor(key);
+      if(r){
+        const dObj = new Date(r.wyDate);
+        if(!lastUpdated || dObj > lastUpdated) lastUpdated = dObj;
+      }
+    });
+  });
+
+  const aoa = [];
+  aoa.push(['Query', null, null, null, null, null, 'Version']);
+  aoa.push(['Query Date', fmtDateSlash(queryDateObj), null, null, null, null, '2.0.0']);
+  aoa.push([]);
+  aoa.push(['Results', null, null, null, null, null, 'Last Updated:', lastUpdated ? fmtDateSlash(lastUpdated) : 'N/A']);
+  aoa.push([]);
+  aoa.push(['BASIN', 'Snow - Water Equivalent', null, null, 'Precipitation', null, null]);
+  aoa.push([null, 'Current', 'Normal', 'Percent-Of-Median', 'Current', 'Normal', 'Percent-Of-Average']);
+
+  BASIN_GROUPS.forEach(g => {
+    const swe = latestResultFor(g.swe);
+    const prec = latestResultFor(g.precip);
+    const row = [
+      g.basin,
+      swe ? Number(swe.current.toFixed(2)) : 'NA',
+      swe ? Number(swe.median.toFixed(2)) : 'NA',
+      swe && !isNaN(swe.percent) ? Number(swe.percent.toFixed(0)) : 'NA',
+      prec ? Number(prec.current.toFixed(2)) : 'NA',
+      prec ? Number(prec.median.toFixed(2)) : 'NA',
+      prec && !isNaN(prec.percent) ? Number(prec.percent.toFixed(0)) : 'NA',
+    ];
+    aoa.push(row);
+  });
+
+  aoa.push([]);
+  aoa.push(['Notes']);
+  aoa.push(['- This routine downloads data from the NRCS SNOTEL/PRECIP websites listed below and calculates the statistics shown above.']);
+  aoa.push([]);
+  aoa.push(["- Raw data from the website are saved into individual site tabs; calculations are done in this Summary tab."]);
+  aoa.push([]);
+  SITES.forEach(s => aoa.push([s.url]));
+
+  const wb = XLSX.utils.book_new();
+  const wsSummary = XLSX.utils.aoa_to_sheet(aoa);
+
+  wsSummary['!merges'] = [
+    { s:{r:5,c:1}, e:{r:5,c:3} },
+    { s:{r:5,c:4}, e:{r:5,c:6} },
+  ];
+  wsSummary['!cols'] = [
+    {wch:36},{wch:10},{wch:10},{wch:16},{wch:10},{wch:10},{wch:18}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+  SITES.forEach(s => {
+    const d = siteData[s.key];
+    if(d.status === 'ok' && d.rows){
+      const ws = XLSX.utils.json_to_sheet(d.rows, { header: d.fields });
+      XLSX.utils.book_append_sheet(wb, ws, s.label.slice(0,31));
+    }
+  });
+
+  const filename = `Precip-Inflow_${fmtDateFile(queryDateObj)}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+// --- 6-panel charts (mirrors R script) ---
+function buildChartSeries(site){
+  const d = siteData[site.key];
+  if(!d || d.status !== 'ok') return null;
+
+  const fields = d.fields;
+  const yearCols = fields.filter(f => /^\d{4}$/.test(f)).map(Number).sort((a,b)=>a-b);
+  if(yearCols.length < 1) return null;
+
+  const currentWyCol = String(yearCols[yearCols.length-1]);
+  const previousWyCol = String(yearCols[yearCols.length-2] ?? yearCols[yearCols.length-1]);
+  const medianCol = "Median ('91-'20)";
+  if(!fields.includes(medianCol)) return null;
+
+  const rows = d.rows.map(r => ({
+    date: r.date,
+    dd: dummyDate(r.date),
+    current: parseFloatOrNull(r[currentWyCol]),
+    previous: parseFloatOrNull(r[previousWyCol]),
+    median: parseFloatOrNull(r[medianCol]),
+  })).sort((a,b) => a.dd - b.dd);
+
+  let latestPoint = null;
+  rows.forEach(r => { if(r.current !== null) latestPoint = r; });
+
+  let realYear = null;
+  if(latestPoint){
+    const [mm] = latestPoint.date.split('-').map(Number);
+    realYear = mm >= 10 ? Number(currentWyCol) - 1 : Number(currentWyCol);
+  }
+
+  return {
+    rows, currentWyCol, previousWyCol,
+    asOfDate: latestPoint ? latestPoint.dd : null,
+    asOfRealYear: realYear
+  };
+}
+
+function drawChart(svgEl, site, cfg){
+  const data = buildChartSeries(site);
+  const W = 520, H = 380, M = {top:50, right:20, bottom:70, left:55};
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+
+  const svg = d3.select(svgEl)
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', '100%')
+    .style('background', '#fff')
+    .style('font-family', 'Segoe UI, system-ui, sans-serif');
+  svg.selectAll('*').remove();
+
+  svg.append('text').attr('x', W/2).attr('y', 20).attr('text-anchor','middle')
+    .style('font-size','13px').style('font-weight','700').style('fill','#111')
+    .text(cfg.plotTitle);
+
+  if(!data){
+    svg.append('text').attr('x', W/2).attr('y', H/2).attr('text-anchor','middle')
+      .style('font-size','12px').style('fill','#888').text('No data loaded for this site');
+    return;
+  }
+
+  svg.append('text').attr('x', W/2).attr('y', 36).attr('text-anchor','middle')
+    .style('font-size','11px').style('fill','#333')
+    .text(data.asOfDate ? `(as of ${fmtTitleDate(data.asOfDate, data.asOfRealYear)})` : '');
+
+  const x0 = new Date(1979,9,1), x1 = new Date(1980,8,30);
+  const x = d3.scaleTime().domain([x0,x1]).range([0, innerW]);
+
+  const allVals = [];
+  data.rows.forEach(r => { [r.current,r.previous,r.median].forEach(v => { if(v!==null) allVals.push(v); }); });
+  const maxV = d3.max(allVals) || cfg.yInterval;
+  const base = cfg.yInterval;
+  const yMax = (maxV % base) > (base/2) ? (maxV - (maxV%base)) + 2*base : (maxV - (maxV%base)) + base;
+  const y = d3.scaleLinear().domain([0, yMax]).range([innerH, 0]);
+
+  const g = svg.append('g').attr('transform', `translate(${M.left},${M.top})`);
+
+  g.append('g').selectAll('line.hgrid').data(y.ticks(Math.round(yMax/base))).enter()
+    .append('line').attr('x1',0).attr('x2',innerW).attr('y1',d=>y(d)).attr('y2',d=>y(d))
+    .style('stroke','#e5e5e5').style('stroke-width',1);
+
+  g.append('g').selectAll('line.vgrid').data(d3.timeMonth.range(x0, x1)).enter()
+    .append('line').attr('x1',d=>x(d)).attr('x2',d=>x(d)).attr('y1',0).attr('y2',innerH)
+    .style('stroke','#e5e5e5').style('stroke-width',1);
+
+  if(cfg.showFutureRect && data.asOfDate){
+    const rectX = x(data.asOfDate);
+    const rectWidth = Math.max(0, innerW - rectX);
+    g.append('rect')
+      .attr('x', rectX).attr('width', rectWidth)
+      .attr('y', 0).attr('height', innerH)
+      .style('fill', '#f2f2f2').style('opacity', 0.7);
+
+    const ay = y(yMax) + (innerH*0.07) + 10;
+    const arrowLen = 27; // ~2/3 of previous 40
+    const labelPad = 8;
+    const labelWidth = 38; // approx width of "FUTURE" / "PAST" text at 9px bold
+
+    // FUTURE arrow: inside shaded region, pointing right
+    const futureAvailable = rectWidth;
+    const futureNeeded = Math.max(arrowLen, labelWidth) + labelPad*2;
+    if(futureAvailable >= futureNeeded){
+      const startX = rectX + labelPad;
+      g.append('text').attr('x', startX).attr('y', ay - 8)
+        .style('font-size','9px').style('font-weight','700').text('FUTURE');
+      g.append('line').attr('x1',startX).attr('x2',startX+arrowLen).attr('y1',ay).attr('y2',ay)
+        .style('stroke','#111').style('stroke-width',1.5).attr('marker-end','url(#arrowhead)');
+    }
+
+    // PAST arrow: inside historical (unshaded) region, pointing left
+    const pastAvailable = rectX; // width of historical region from left edge to today
+    const pastNeeded = Math.max(arrowLen, labelWidth) + labelPad*2;
+    if(pastAvailable >= pastNeeded){
+      const endX = rectX - labelPad; // right edge of the PAST arrow, near today
+      const startX = endX - arrowLen;
+      g.append('text').attr('x', endX).attr('y', ay - 8).attr('text-anchor','end')
+        .style('font-size','9px').style('font-weight','700').text('PAST');
+      g.append('line').attr('x1',endX).attr('x2',startX).attr('y1',ay).attr('y2',ay)
+        .style('stroke','#111').style('stroke-width',1.5).attr('marker-end','url(#arrowhead-left)');
+    }
+  }
+
+  svg.append('defs').append('marker')
+    .attr('id','arrowhead').attr('markerWidth',6).attr('markerHeight',6)
+    .attr('refX',5).attr('refY',3).attr('orient','auto')
+    .append('path').attr('d','M0,0 L6,3 L0,6 Z').style('fill','#111');
+
+  svg.append('defs').append('marker')
+    .attr('id','arrowhead-left').attr('markerWidth',6).attr('markerHeight',6)
+    .attr('refX',1).attr('refY',3).attr('orient','auto')
+    .append('path').attr('d','M6,0 L0,3 L6,6 Z').style('fill','#111');
+
+  const xAxis = d3.axisBottom(x).ticks(d3.timeMonth.every(1)).tickFormat(d3.timeFormat('%b'));
+  g.append('g').attr('transform', `translate(0,${innerH})`).call(xAxis)
+    .call(gg => gg.select('.domain').style('stroke','#111'))
+    .selectAll('text').style('font-size','10px').style('fill','#111');
+
+  const yAxis = d3.axisLeft(y).ticks(Math.round(yMax/base));
+  g.append('g').call(yAxis)
+    .call(gg => gg.select('.domain').style('stroke','#111'))
+    .selectAll('text').style('font-size','10px').style('fill','#111');
+
+  svg.append('text')
+    .attr('transform','rotate(-90)')
+    .attr('x', -(M.top+innerH/2)).attr('y', 14)
+    .attr('text-anchor','middle').style('font-size','11px').style('fill','#111')
+    .text(cfg.yLabel);
+
+  function lineFor(accessor){
+    return d3.line()
+      .defined(d => accessor(d) !== null)
+      .x(d => x(d.dd)).y(d => y(accessor(d)));
+  }
+
+  const series = [
+    { accessor: d=>d.median, color:'#000000', width:1.6, label:'Median 1991-2020' },
+    { accessor: d=>d.previous, color:'#9A3324', width:1.6, label:`Water Year: ${data.previousWyCol}` },
+    { accessor: d=>d.current, color:'#25819C', width:2.2, label:`Water Year: ${data.currentWyCol}` },
+  ];
+
+  series.forEach(s => {
+    g.append('path').datum(data.rows)
+      .attr('fill','none').attr('stroke', s.color).attr('stroke-width', s.width)
+      .attr('d', lineFor(s.accessor));
+  });
+
+  const legend = svg.append('g').attr('transform', `translate(${M.left}, ${H-22})`);
+  let lx = 0;
+  series.forEach(s => {
+    legend.append('line').attr('x1',lx).attr('x2',lx+18).attr('y1',0).attr('y2',0)
+      .style('stroke', s.color).style('stroke-width', 2.5);
+    legend.append('text').attr('x', lx+22).attr('y', 4)
+      .style('font-size','10px').style('fill','#111').text(s.label);
+    lx += 22 + (s.label.length * 5.5) + 18;
+  });
+}
+
+function renderCharts(){
+  const grid = document.getElementById('chartGrid');
+  grid.innerHTML = CHART_CONFIGS.map((c,i) => `
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <span class="chart-panel-title">${c.plotTitle}</span>
+        <button class="chart-dl-btn" data-idx="${i}">⬇ PNG</button>
+      </div>
+      <div class="chart-svg-wrap">
+        <svg id="chart-svg-${i}"></svg>
+      </div>
+    </div>
+  `).join('');
+
+  CHART_CONFIGS.forEach((c,i) => {
+    try{
+      const site = SITES.find(s=>s.key===c.key);
+      drawChart(document.getElementById(`chart-svg-${i}`), site, c);
+    }catch(e){
+      console.error('Chart render failed for', c.key, e);
+    }
+  });
+
+  grid.querySelectorAll('.chart-dl-btn').forEach(btn => {
+    btn.addEventListener('click', () => downloadChartPNG(parseInt(btn.dataset.idx)));
+  });
+}
+
+function downloadChartPNG(idx){
+  const cfg = CHART_CONFIGS[idx];
+  const svgEl = document.getElementById(`chart-svg-${idx}`);
+  const serializer = new XMLSerializer();
+  let svgStr = serializer.serializeToString(svgEl);
+  if(!svgStr.includes('xmlns=')) svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+
+  const scale = 2;
+  const vb = svgEl.viewBox.baseVal;
+  const w = vb && vb.width ? vb.width : 520;
+  const h = vb && vb.height ? vb.height : 380;
+
+  const img = new Image();
+  const svgBlob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(svgBlob);
+
+  img.onload = function(){
+    const canvas = document.createElement('canvas');
+    canvas.width = w*scale; canvas.height = h*scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.scale(scale,scale);
+    ctx.drawImage(img,0,0,w,h);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = cfg.filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }, 'image/png');
+  };
+  img.onerror = function(){
+    setStatus('PNG export failed - try again after data fully loads.', 'error');
+  };
+  img.src = url;
+}
+
+// --- Site data table (shared, dropdown-driven) ---
+function populateTableSiteSelect(){
+  const sel = document.getElementById('tableSiteSelect');
+  sel.innerHTML = SITES.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+  sel.addEventListener('change', () => {
+    renderSiteTable();
+    populateYearCheckboxes();
+    clearYearPlot();
+  });
+}
+
+function renderSiteTable(){
+  const sel = document.getElementById('tableSiteSelect');
+  const key = sel.value;
+  const area = document.getElementById('siteTableArea');
+  const d = siteData[key];
+  if(!d || d.status !== 'ok'){
+    area.innerHTML = `<div class="empty-state">Site not loaded yet. Fetch or upload its CSV above.</div>`;
+    return;
+  }
+  const fields = d.fields;
+  const rowsHtml = d.rows.map(r => `<tr>${fields.map(f => `<td>${r[f] ?? ''}</td>`).join('')}</tr>`).join('');
+  area.innerHTML = `
+    <div class="site-table-wrap">
+      <table>
+        <thead><tr>${fields.map(f=>`<th>${f}</th>`).join('')}</tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// --- Custom year comparison plot ---
+function populateYearCheckboxes(){
+  const sel = document.getElementById('tableSiteSelect');
+  const key = sel.value;
+  const d = siteData[key];
+  const container = document.getElementById('yearCheckboxes');
+  if(!d || d.status !== 'ok'){
+    container.innerHTML = `<div style="font-size:12px; color:var(--muted);">Load this site's data first.</div>`;
+    return;
+  }
+  const yearCols = d.fields.filter(f => /^\d{4}$/.test(f)).map(Number).sort((a,b)=>b-a);
+  container.innerHTML = yearCols.map(y => `
+    <label class="year-checkbox-label">
+      <input type="checkbox" value="${y}">
+      ${y}
+    </label>
+  `).join('');
+}
+
+function toggleYearPlotPanel(){
+  const panel = document.getElementById('yearPlotPanel');
+  const showing = panel.style.display !== 'none';
+  panel.style.display = showing ? 'none' : 'block';
+  if(!showing){
+    populateYearCheckboxes();
+    setPlotMode('custom');
+    clearYearPlot();
+  }
+}
+
+function setPlotMode(mode){
+  // mode: 'custom' or 'analog'
+  const yearPickerControls = document.getElementById('yearPickerControls');
+  const analogToggleControls = document.getElementById('analogToggleControls');
+  const checkbox = document.getElementById('analogModeCheckbox');
+
+  if(mode === 'analog'){
+    yearPickerControls.style.display = 'none';
+    analogToggleControls.style.display = 'none';
+    checkbox.checked = true;
+  }else{
+    yearPickerControls.style.display = 'flex';
+    analogToggleControls.style.display = 'none';
+    checkbox.checked = false;
+  }
+}
+
+function clearYearPlot(){
+  const svg = document.getElementById('year-plot-svg');
+  d3.select(svg).selectAll('*').remove();
+  document.getElementById('yearPlotPngBtn').disabled = true;
+}
+
+function renderYearPlot(){
+  const sel = document.getElementById('tableSiteSelect');
+  const key = sel.value;
+  const site = SITES.find(s=>s.key===key);
+  const d = siteData[key];
+  if(!d || d.status !== 'ok'){
+    setStatus("Load this site's data first.", 'error');
+    return;
+  }
+
+  const analogMode = document.getElementById('analogModeCheckbox').checked;
+  const medianCol = "Median ('91-'20)";
+  if(!d.fields.includes(medianCol)){
+    setStatus(`Column "${medianCol}" not found in this site's data.`, 'error');
+    return;
+  }
+
+  if(analogMode){
+    renderAnalogProjection(site, d, medianCol);
+  }else{
+    const checked = Array.from(document.querySelectorAll('#yearCheckboxes input:checked')).map(cb => cb.value);
+    if(checked.length === 0){
+      setStatus('Select at least one water year to plot.', 'error');
+      return;
+    }
+    const rows = d.rows.map(r => {
+      const point = { date:r.date, dd:dummyDate(r.date), median: parseFloatOrNull(r[medianCol]) };
+      checked.forEach(y => { point[y] = parseFloatOrNull(r[y]); });
+      return point;
+    }).sort((a,b) => a.dd - b.dd);
+
+    drawMultiYearChart(document.getElementById('year-plot-svg'), site, rows, checked);
+  }
+
+  document.getElementById('yearPlotPngBtn').disabled = false;
+  clearStatus();
+}
+
+function renderAnalogProjection(site, d, medianCol){
+  const fields = d.fields;
+  const yearCols = fields.filter(f => /^\d{4}$/.test(f)).map(Number).sort((a,b)=>a-b);
+  const currentWyCol = String(yearCols[yearCols.length-1]);
+  const histYears = yearCols.filter(y => y >= 1991 && y <= 2020).map(String);
+
+  if(histYears.length === 0){
+    setStatus('No historical years (1991-2020) found in this site\'s data.', 'error');
+    return;
+  }
+
+  // sort rows by dummy date (water-year order)
+  const sortedRows = d.rows.map(r => ({
+    date:r.date, dd:dummyDate(r.date),
+    current: parseFloatOrNull(r[currentWyCol]),
+    median: parseFloatOrNull(r[medianCol]),
+    hist: {}
+  }));
+  histYears.forEach(hy => {
+    const colVal = (row) => parseFloatOrNull(row[hy]);
+    sortedRows.forEach((sr, i) => { sr.hist[hy] = colVal(d.rows[i]); });
+  });
+  sortedRows.sort((a,b) => a.dd - b.dd);
+
+  // find today's row = last row with valid current-WY data (anchor point)
+  let anchorIdx = -1;
+  for(let i=0;i<sortedRows.length;i++){
+    if(sortedRows[i].current !== null) anchorIdx = i;
+  }
+  if(anchorIdx === -1){
+    setStatus('No current water year data found to anchor projections.', 'error');
+    return;
+  }
+  const anchorValue = sortedRows[anchorIdx].current;
+
+  // build projection series per historical year
+  const projections = {};
+  histYears.forEach(hy => {
+    const anchorHist = sortedRows[anchorIdx].hist[hy];
+    if(anchorHist === null || anchorHist === undefined){
+      projections[hy] = null; // can't anchor this year, skip
+      return;
+    }
+    projections[hy] = sortedRows.map((row, i) => {
+      if(i < anchorIdx) return null; // only project forward from today
+      const hv = row.hist[hy];
+      if(hv === null || hv === undefined) return null;
+      return anchorValue + (hv - anchorHist);
+    });
+  });
+
+  // actual-to-date series (historical/solid line): only up to and including anchor
+  const actualRows = sortedRows.map((row, i) => ({
+    dd: row.dd,
+    value: i <= anchorIdx ? row.current : null
+  }));
+
+  drawAnalogChart(document.getElementById('year-plot-svg'), site, sortedRows, actualRows, projections, histYears, anchorIdx);
+}
+
+function drawAnalogChart(svgEl, site, sortedRows, actualRows, projections, histYears, anchorIdx){
+  const W = 760, H = 440, M = {top:60, right:20, bottom:70, left:60};
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+
+  const svg = d3.select(svgEl)
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', '100%')
+    .style('background', '#fff')
+    .style('font-family', 'Segoe UI, system-ui, sans-serif');
+  svg.selectAll('*').remove();
+
+  const cfg = CHART_CONFIGS.find(c => c.key === site.key);
+  const yLabel = cfg ? cfg.yLabel : 'Value';
+  const yInterval = cfg ? cfg.yInterval : 5;
+
+  const titleInput = document.getElementById('yearPlotTitleInput').value.trim();
+  const subtitleInput = document.getElementById('yearPlotSubtitleInput').value.trim();
+  const defaultTitle = cfg ? cfg.plotTitle : site.title;
+  const titleText = titleInput || defaultTitle;
+  const subtitleText = subtitleInput || 'Analog Projection (1991-2020 Historical Increments)';
+
+  svg.append('text').attr('x', W/2).attr('y', 22).attr('text-anchor','middle')
+    .style('font-size','14px').style('font-weight','700').style('fill','#111')
+    .text(titleText);
+  svg.append('text').attr('x', W/2).attr('y', 40).attr('text-anchor','middle')
+    .style('font-size','12px').style('fill','#333')
+    .text(subtitleText);
+
+  const x0 = new Date(1979,9,1), x1 = new Date(1980,8,30);
+  const x = d3.scaleTime().domain([x0,x1]).range([0, innerW]);
+
+  const allVals = [];
+  sortedRows.forEach(r => { if(r.median !== null) allVals.push(r.median); if(r.current !== null) allVals.push(r.current); });
+  histYears.forEach(hy => {
+    if(projections[hy]) projections[hy].forEach(v => { if(v !== null) allVals.push(v); });
+  });
+  const maxV = d3.max(allVals) || yInterval;
+  const base = yInterval;
+  const yMax = (maxV % base) > (base/2) ? (maxV - (maxV%base)) + 2*base : (maxV - (maxV%base)) + base;
+  const y = d3.scaleLinear().domain([0, Math.max(0,yMax)]).range([innerH, 0]);
+
+  const g = svg.append('g').attr('transform', `translate(${M.left},${M.top+10})`);
+
+  g.append('g').selectAll('line.hgrid').data(y.ticks(Math.round(yMax/base))).enter()
+    .append('line').attr('x1',0).attr('x2',innerW).attr('y1',d=>y(d)).attr('y2',d=>y(d))
+    .style('stroke','#e5e5e5').style('stroke-width',1);
+
+  g.append('g').selectAll('line.vgrid').data(d3.timeMonth.range(x0, x1)).enter()
+    .append('line').attr('x1',d=>x(d)).attr('x2',d=>x(d)).attr('y1',0).attr('y2',innerH)
+    .style('stroke','#e5e5e5').style('stroke-width',1);
+
+  const xAxis = d3.axisBottom(x).ticks(d3.timeMonth.every(1)).tickFormat(d3.timeFormat('%b'));
+  g.append('g').attr('transform', `translate(0,${innerH})`).call(xAxis)
+    .call(gg => gg.select('.domain').style('stroke','#111'))
+    .selectAll('text').style('font-size','10px').style('fill','#111');
+
+  const yAxis = d3.axisLeft(y).ticks(Math.round(yMax/base));
+  g.append('g').call(yAxis)
+    .call(gg => gg.select('.domain').style('stroke','#111'))
+    .selectAll('text').style('font-size','10px').style('fill','#111');
+
+  svg.append('text').attr('transform','rotate(-90)')
+    .attr('x', -(M.top+10+innerH/2)).attr('y', 16)
+    .attr('text-anchor','middle').style('font-size','11px').style('fill','#111')
+    .text(yLabel);
+
+  // today marker line
+  const anchorDate = sortedRows[anchorIdx].dd;
+  g.append('line').attr('x1',x(anchorDate)).attr('x2',x(anchorDate)).attr('y1',0).attr('y2',innerH)
+    .style('stroke','#999').style('stroke-width',1).style('stroke-dasharray','4,3');
+  g.append('text').attr('x', x(anchorDate)+4).attr('y', 10)
+    .style('font-size','9px').style('fill','#666').text('Today');
+
+  function lineFor(data, accessor){
+    return d3.line().defined(d => accessor(d) !== null).x(d => x(d.dd)).y(d => y(accessor(d)));
+  }
+
+  // median (black)
+  g.append('path').datum(sortedRows)
+    .attr('fill','none').attr('stroke','#000000').attr('stroke-width',1.8)
+    .attr('d', lineFor(sortedRows, d=>d.median));
+
+  // 30 analog projection lines (neutral, thin, translucent)
+  histYears.forEach(hy => {
+    const proj = projections[hy];
+    if(!proj) return;
+    const projRows = sortedRows.map((r,i) => ({ dd:r.dd, v: proj[i] }));
+    g.append('path').datum(projRows)
+      .attr('fill','none').attr('stroke', '#3b82f6').attr('stroke-width', 1)
+      .style('opacity', 0.25)
+      .attr('d', d3.line().defined(d=>d.v!==null).x(d=>x(d.dd)).y(d=>y(d.v)));
+  });
+
+  // actual-to-date (solid dark red, matches "current WY" convention)
+  g.append('path').datum(actualRows)
+    .attr('fill','none').attr('stroke','#9A3324').attr('stroke-width',2.4)
+    .attr('d', d3.line().defined(d=>d.value!==null).x(d=>x(d.dd)).y(d=>y(d.value)));
+
+  // legend
+  const legendG = svg.append('g').attr('transform', `translate(${M.left}, ${H-22})`);
+  const legendItems = [
+    {color:'#000000', width:2.5, label:'Median 1991-2020', opacity:1},
+    {color:'#9A3324', width:2.5, label:'Actual (to date)', opacity:1},
+    {color:'#3b82f6', width:2.5, label:'Analog Projections (1991-2020)', opacity:0.5},
+  ];
+  let lx = 0;
+  legendItems.forEach(s => {
+    legendG.append('line').attr('x1',lx).attr('x2',lx+18).attr('y1',0).attr('y2',0)
+      .style('stroke', s.color).style('stroke-width', s.width).style('opacity', s.opacity);
+    legendG.append('text').attr('x', lx+22).attr('y', 4)
+      .style('font-size','10px').style('fill','#111').text(s.label);
+    lx += 22 + (s.label.length*5.5) + 20;
+  });
+}
+
+function drawMultiYearChart(svgEl, site, rows, years){
+  const W = 760, H = 440, M = {top:60, right:20, bottom:70, left:60};
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+
+  const svg = d3.select(svgEl)
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', '100%')
+    .style('background', '#fff')
+    .style('font-family', 'Segoe UI, system-ui, sans-serif');
+  svg.selectAll('*').remove();
+
+  const cfg = CHART_CONFIGS.find(c => c.key === site.key);
+  const yLabel = cfg ? cfg.yLabel : 'Value';
+  const yInterval = cfg ? cfg.yInterval : 5;
+
+  const titleInput = document.getElementById('yearPlotTitleInput').value.trim();
+  const subtitleInput = document.getElementById('yearPlotSubtitleInput').value.trim();
+  const defaultTitle = cfg ? cfg.plotTitle : site.title;
+  const titleText = titleInput || defaultTitle;
+  const subtitleText = subtitleInput || 'Water Year Comparison';
+
+  svg.append('text').attr('x', W/2).attr('y', 22).attr('text-anchor','middle')
+    .style('font-size','14px').style('font-weight','700').style('fill','#111')
+    .text(titleText);
+  svg.append('text').attr('x', W/2).attr('y', 40).attr('text-anchor','middle')
+    .style('font-size','12px').style('fill','#333')
+    .text(subtitleText);
+
+  const x0 = new Date(1979,9,1), x1 = new Date(1980,8,30);
+  const x = d3.scaleTime().domain([x0,x1]).range([0, innerW]);
+
+  const allVals = [];
+  rows.forEach(r => {
+    if(r.median !== null) allVals.push(r.median);
+    years.forEach(y => { if(r[y] !== null) allVals.push(r[y]); });
+  });
+  const maxV = d3.max(allVals) || yInterval;
+  const base = yInterval;
+  const yMax = (maxV % base) > (base/2) ? (maxV - (maxV%base)) + 2*base : (maxV - (maxV%base)) + base;
+  const y = d3.scaleLinear().domain([0, yMax]).range([innerH, 0]);
+
+  const g = svg.append('g').attr('transform', `translate(${M.left},${M.top+10})`);
+
+  g.append('g').selectAll('line.hgrid').data(y.ticks(Math.round(yMax/base))).enter()
+    .append('line').attr('x1',0).attr('x2',innerW).attr('y1',d=>y(d)).attr('y2',d=>y(d))
+    .style('stroke','#e5e5e5').style('stroke-width',1);
+
+  g.append('g').selectAll('line.vgrid').data(d3.timeMonth.range(x0, x1)).enter()
+    .append('line').attr('x1',d=>x(d)).attr('x2',d=>x(d)).attr('y1',0).attr('y2',innerH)
+    .style('stroke','#e5e5e5').style('stroke-width',1);
+
+  const xAxis = d3.axisBottom(x).ticks(d3.timeMonth.every(1)).tickFormat(d3.timeFormat('%b'));
+  g.append('g').attr('transform', `translate(0,${innerH})`).call(xAxis)
+    .call(gg => gg.select('.domain').style('stroke','#111'))
+    .selectAll('text').style('font-size','10px').style('fill','#111');
+
+  const yAxis = d3.axisLeft(y).ticks(Math.round(yMax/base));
+  g.append('g').call(yAxis)
+    .call(gg => gg.select('.domain').style('stroke','#111'))
+    .selectAll('text').style('font-size','10px').style('fill','#111');
+
+  svg.append('text').attr('transform','rotate(-90)')
+    .attr('x', -(M.top+10+innerH/2)).attr('y', 16)
+    .attr('text-anchor','middle').style('font-size','11px').style('fill','#111')
+    .text(yLabel);
+
+  function lineFor(accessor){
+    return d3.line().defined(d => accessor(d) !== null).x(d => x(d.dd)).y(d => y(accessor(d)));
+  }
+
+  const series = [{ accessor: d=>d.median, color:'#000000', width:1.8, label:'Median 1991-2020' }];
+  years.forEach((yr, i) => {
+    series.push({ accessor: d=>d[yr], color: YEAR_COLORS[i % YEAR_COLORS.length], width:1.8, label:`Water Year: ${yr}` });
+  });
+
+  series.forEach(s => {
+    g.append('path').datum(rows)
+      .attr('fill','none').attr('stroke', s.color).attr('stroke-width', s.width)
+      .attr('d', lineFor(s.accessor));
+  });
+
+  const legendG = svg.append('g').attr('transform', `translate(${M.left}, ${H-22})`);
+  let lx = 0, ly = 0;
+  const maxLineWidth = innerW;
+  series.forEach(s => {
+    const estWidth = 22 + (s.label.length*5.5) + 18;
+    if(lx + estWidth > maxLineWidth){ lx = 0; ly += 16; }
+    legendG.append('line').attr('x1',lx).attr('x2',lx+18).attr('y1',ly).attr('y2',ly)
+      .style('stroke', s.color).style('stroke-width', 2.5);
+    legendG.append('text').attr('x', lx+22).attr('y', ly+4)
+      .style('font-size','10px').style('fill','#111').text(s.label);
+    lx += estWidth;
+  });
+}
+
+function downloadYearPlotPNG(){
+  const svgEl = document.getElementById('year-plot-svg');
+  const serializer = new XMLSerializer();
+  let svgStr = serializer.serializeToString(svgEl);
+  if(!svgStr.includes('xmlns=')) svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+
+  const vb = svgEl.viewBox.baseVal;
+  const w = vb && vb.width ? vb.width : 760;
+  const h = vb && vb.height ? vb.height : 440;
+  const scale = 2;
+
+  const img = new Image();
+  const svgBlob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(svgBlob);
+
+  img.onload = function(){
+    const canvas = document.createElement('canvas');
+    canvas.width = w*scale; canvas.height = h*scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.scale(scale,scale);
+    ctx.drawImage(img,0,0,w,h);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      const sel = document.getElementById('tableSiteSelect');
+      const site = SITES.find(s=>s.key===sel.value);
+      const analogMode = document.getElementById('analogModeCheckbox').checked;
+      const suffix = analogMode ? 'analog_projection' : 'WY_comparison';
+      a.href = URL.createObjectURL(blob);
+      a.download = `${site.label.replace(/\s+/g,'_')}_${suffix}.png`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }, 'image/png');
+  };
+  img.onerror = function(){
+    setStatus('PNG export failed.', 'error');
+  };
+  img.src = url;
+}
+
+document.getElementById('toggleYearPlotBtn').addEventListener('click', () => {
+  const panel = document.getElementById('yearPlotPanel');
+  panel.style.display = 'block';
+  populateYearCheckboxes();
+  setPlotMode('custom');
+  clearYearPlot();
+});
+document.getElementById('renderYearPlotBtn').addEventListener('click', renderYearPlot);
+document.getElementById('yearPlotPngBtn').addEventListener('click', downloadYearPlotPNG);
+document.getElementById('quickAnalogBtn').addEventListener('click', () => {
+  const sel = document.getElementById('tableSiteSelect');
+  const key = sel.value;
+  const d = siteData[key];
+  if(!d || d.status !== 'ok'){
+    setStatus("Load this site's data first.", 'error');
+    return;
+  }
+  const panel = document.getElementById('yearPlotPanel');
+  panel.style.display = 'block';
+  populateYearCheckboxes();
+  setPlotMode('analog');
+  renderYearPlot();
+});
+
+dateInput.value = new Date().toISOString().slice(0,10);
+renderSiteGrid();
+populateTableSiteSelect();
+loadAllFromCacheOnStartup();
+</script>
+</body>
+</html>
